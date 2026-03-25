@@ -12,16 +12,16 @@ let questionCount = 0;
 // --- Human-like delay system ---
 function getFatigueMultiplier() {
   if (questionCount < 10) return 1;
-  if (questionCount < 25) return 1.2;
-  if (questionCount < 40) return 1.4;
-  return 1.6;
+  if (questionCount < 25) return 1.1;
+  if (questionCount < 40) return 1.2;
+  return 1.3;
 }
 
 function humanDelay(minSeconds = 5, maxSeconds = 15) {
   const fatigue = getFatigueMultiplier();
   const base = (Math.random() * (maxSeconds - minSeconds) + minSeconds) * fatigue;
-  // 20% chance of extra "thinking" pause (re-reading the question, hesitating)
-  const thinkingPause = Math.random() < 0.2 ? Math.random() * 10 : 0;
+  // 15% chance of a small extra pause
+  const thinkingPause = Math.random() < 0.15 ? Math.random() * 5 : 0;
   const totalMs = (base + thinkingPause) * 1000;
   console.log(`[Auto-McGraw] Waiting ${(totalMs / 1000).toFixed(1)}s (question #${questionCount}, fatigue: ${fatigue}x)`);
   return new Promise(resolve => setTimeout(resolve, totalMs));
@@ -665,7 +665,7 @@ async function processChatGPTResponse(responseText) {
     lastCorrectAnswer = null;
 
     // Delay before selecting the answer ("considering the options")
-    await humanDelay(5, 12);
+    await humanDelay(0, 10);
 
     if (container.querySelector(".awd-probe-type-matching")) {
       alert(
@@ -711,31 +711,24 @@ async function processChatGPTResponse(responseText) {
           .catch(() => {});
       } else {
         try {
-          // Delay before clicking confidence ("deciding how sure I am")
-          await humanDelay(3, 7);
-
           const confidenceButton = await waitForElement(
             getConfidenceSelector(),
             10000
           );
           confidenceButton.click();
 
-          // Delay after confidence, before checking answer
-          await humanDelay(4, 8);
+          // Small pause after confidence before moving on
+          await humanDelay(2, 5);
 
           checkForCorrectAnswer(container);
 
           const nextButton = await waitForElement(".next-button", 10000);
-
-          // Delay before clicking next ("reading feedback / moving on")
-          await humanDelay(4, 10);
-
           nextButton.click();
 
-          // Delay before loading next question
-          await humanDelay(3, 6);
-
-          checkForNextStep();
+          // Brief transition before next question
+          setTimeout(() => {
+            checkForNextStep();
+          }, 1500);
         } catch (error) {
           console.error("Automation error:", error);
           isAutomating = false;
