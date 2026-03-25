@@ -7,6 +7,38 @@ let randomConfidence = false;
 let pauseBeforeSubmit = false;
 let waitingForDuplicateCompletion = false;
 let currentResponse = null;
+let questionCount = 0;
+
+// --- Human-like delay system ---
+function getFatigueMultiplier() {
+  if (questionCount < 10) return 1;
+  if (questionCount < 25) return 1.2;
+  if (questionCount < 40) return 1.4;
+  return 1.6;
+}
+
+function humanDelay(minSeconds = 5, maxSeconds = 15) {
+  const fatigue = getFatigueMultiplier();
+  const base = (Math.random() * (maxSeconds - minSeconds) + minSeconds) * fatigue;
+  // 20% chance of extra "thinking" pause (re-reading the question, hesitating)
+  const thinkingPause = Math.random() < 0.2 ? Math.random() * 10 : 0;
+  const totalMs = (base + thinkingPause) * 1000;
+  console.log(`[Auto-McGraw] Waiting ${(totalMs / 1000).toFixed(1)}s (question #${questionCount}, fatigue: ${fatigue}x)`);
+  return new Promise(resolve => setTimeout(resolve, totalMs));
+}
+
+// Mini break every ~12 questions (30-90 seconds, like checking your phone)
+function shouldTakeBreak() {
+  return questionCount > 0 && questionCount % 12 === 0;
+}
+
+async function maybeBreak() {
+  if (shouldTakeBreak()) {
+    const breakTime = (Math.random() * 60 + 30) * 1000;
+    console.log(`[Auto-McGraw] Taking a break for ${(breakTime / 1000).toFixed(0)}s...`);
+    return new Promise(resolve => setTimeout(resolve, breakTime));
+  }
+}
 
 chrome.storage.sync.get(["doubleCreditMode", "randomConfidence", "pauseBeforeSubmit"], function (data) {
   doubleCreditMode = data.doubleCreditMode || false;
@@ -353,7 +385,7 @@ function handleForcedLearning() {
   return false;
 }
 
-function checkForNextStep() {
+async function checkForNextStep() {
   if (!isAutomating) return;
 
   if (handleTopicOverview()) {
@@ -368,6 +400,14 @@ function checkForNextStep() {
   if (container && !container.querySelector(".forced-learning")) {
     const qData = parseQuestion();
     if (qData) {
+      questionCount++;
+
+      // Take a mini break every ~12 questions
+      await maybeBreak();
+
+      // Simulate reading the question (5-15 seconds, scaled by fatigue)
+      await humanDelay(5, 15);
+
       chrome.runtime.sendMessage({
         type: "sendQuestionToChatGPT",
         question: qData,
@@ -600,7 +640,7 @@ function cleanAnswer(answer) {
   return answer;
 }
 
-function processChatGPTResponse(responseText) {
+async function processChatGPTResponse(responseText) {
   try {
     if (handleTopicOverview()) {
       return;
@@ -623,6 +663,9 @@ function processChatGPTResponse(responseText) {
 
     lastIncorrectQuestion = null;
     lastCorrectAnswer = null;
+
+    // Delay before selecting the answer ("considering the options")
+    await humanDelay(5, 12);
 
     if (container.querySelector(".awd-probe-type-matching")) {
       alert(
@@ -667,35 +710,37 @@ function processChatGPTResponse(responseText) {
           })
           .catch(() => {});
       } else {
-        waitForElement(
-          getConfidenceSelector(),
-          10000
-        )
-          .then((button) => {
-            button.click();
+        try {
+          // Delay before clicking confidence ("deciding how sure I am")
+          await humanDelay(3, 7);
 
-            setTimeout(() => {
-              checkForCorrectAnswer(container);
+          const confidenceButton = await waitForElement(
+            getConfidenceSelector(),
+            10000
+          );
+          confidenceButton.click();
 
-              waitForElement(".next-button", 10000)
-                .then((nextButton) => {
-                  nextButton.click();
-                  setTimeout(() => {
-                    checkForNextStep();
-                  }, 1000);
-                })
-                .catch((error) => {
-                  console.error("Automation error:", error);
-                  isAutomating = false;
-                  updateButtonState();
-                });
-            }, 1000);
-          })
-          .catch((error) => {
-            console.error("Automation error:", error);
-            isAutomating = false;
-            updateButtonState();
-          });
+          // Delay after confidence, before checking answer
+          await humanDelay(4, 8);
+
+          checkForCorrectAnswer(container);
+
+          const nextButton = await waitForElement(".next-button", 10000);
+
+          // Delay before clicking next ("reading feedback / moving on")
+          await humanDelay(4, 10);
+
+          nextButton.click();
+
+          // Delay before loading next question
+          await humanDelay(3, 6);
+
+          checkForNextStep();
+        } catch (error) {
+          console.error("Automation error:", error);
+          isAutomating = false;
+          updateButtonState();
+        }
       }
     }
   } catch (e) {
@@ -740,6 +785,7 @@ function addAssistantButton() {
           );
           if (proceed) {
             isAutomating = true;
+            questionCount = 0;
             btn.textContent = "Stop Automation";
             checkForNextStep();
           }
