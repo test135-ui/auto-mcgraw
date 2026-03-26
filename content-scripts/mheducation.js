@@ -405,8 +405,8 @@ async function checkForNextStep() {
       // Take a mini break every ~12 questions
       await maybeBreak();
 
-      // Simulate reading the question (5-15 seconds, scaled by fatigue)
-      await humanDelay(5, 15);
+      // Simulate reading the question (3-10 seconds, scaled by fatigue)
+      await humanDelay(3, 10);
 
       chrome.runtime.sendMessage({
         type: "sendQuestionToChatGPT",
@@ -665,7 +665,7 @@ async function processChatGPTResponse(responseText) {
     lastCorrectAnswer = null;
 
     // Delay before selecting the answer ("considering the options")
-    await humanDelay(0, 10);
+    await humanDelay(0, 5);
 
     if (container.querySelector(".awd-probe-type-matching")) {
       alert(
@@ -716,9 +716,6 @@ async function processChatGPTResponse(responseText) {
             10000
           );
           confidenceButton.click();
-
-          // Small pause after confidence before moving on
-          await humanDelay(2, 5);
 
           checkForCorrectAnswer(container);
 
